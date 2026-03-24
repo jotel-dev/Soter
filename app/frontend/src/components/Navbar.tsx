@@ -20,8 +20,16 @@ export const Navbar: React.FC = () => {
           Soter
         </Link>
 
+
 {/*Desktop Menu*/}
          <div className="hidden md:flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-4 flex-wrap">
+          <Link href="/dashboard" className="text-sm hover:underline">
+            Dashboard
+          </Link>
+          <Link href="/campaigns" className="text-sm hover:underline">
+            Campaigns
+          </Link>
           <EnvironmentIndicator />
           {publicKey && (
             <span className="text-sm">

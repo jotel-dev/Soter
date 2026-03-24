@@ -1,32 +1,14 @@
 # Soter AI Service
 
-FastAPI-based AI service layer for the Soter platform.
+OCR service for identity document verification using Tesseract.
 
 ## Setup
-
-### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment Variables
-
-Copy `.env.example` to `.env` and configure your API keys:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your API keys:
-- `OPENAI_API_KEY` - Your OpenAI API key (optional)
-- `GROQ_API_KEY` - Your Groq API key (optional, alternative to OpenAI)
-
-At least one API key is required for AI features.
-
-### 3. Run the Service
-
-**Development mode (with auto-reload):**
+## Run
 
 ```bash
 python main.py
@@ -38,13 +20,7 @@ Or using uvicorn directly:
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Production mode:**
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-## API Endpoints
+## API
 
 ### Health Check
 - **GET** `/health` - Service health status
@@ -53,6 +29,62 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ### Interactive Documentation
 - **GET** `/docs` - Swagger UI (OpenAPI documentation)
 - **GET** `/redoc` - ReDoc (alternative documentation)
+
+### Proof-of-Life Verification
+- **POST** `/ai/proof-of-life` - Face detection and liveness verification
+
+Request body:
+
+```json
+{
+  "selfie_image_base64": "<base64-image-or-data-uri>",
+  "burst_images_base64": ["<base64-image>", "<base64-image>"],
+  "confidence_threshold": 0.65
+}
+```
+
+Response body:
+
+```json
+{
+  "is_real_person": true,
+  "confidence": 0.87,
+  "threshold": 0.65,
+  "checks": {
+    "face_detected": true,
+    "blink_detected": true,
+    "head_movement_detected": false,
+    "processed_burst_frames": 3
+  },
+  "reason": "Face detected and confidence threshold met"
+}
+```
+
+### OCR Processing
+- **POST** `/ai/ocr` - Identity document OCR with field extraction
+
+```bash
+curl -X POST "http://localhost:8000/ai/ocr" -F "image=@document.jpg"
+```
+
+**Rate limit:** 10 requests/minute per IP
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "fields": {
+      "name": { "value": "John Doe", "confidence": 0.91 },
+      "date_of_birth": { "value": "15 Jan 1990", "confidence": 0.88 },
+      "id_number": { "value": "AB123456", "confidence": 0.90 }
+    },
+    "raw_text": "...",
+    "processing_time_ms": 950
+  }
+}
+```
 
 ## Project Structure
 
@@ -63,6 +95,13 @@ app/ai-service/
 ├── requirements.txt     # Python dependencies
 ├── .env.example         # Environment variables template
 ├── .env                 # Environment variables (not in git)
+├── api/
+│   └── routes.py       # OCR API routes
+├── schemas/
+│   └── ocr.py          # OCR Pydantic schemas
+├── services/
+│   ├── preprocessing.py # Image preprocessing
+│   └── ocr.py           # OCR service
 └── README.md           # This file
 ```
 
@@ -76,6 +115,11 @@ app/ai-service/
 - ✅ Structured logging
 - ✅ Auto-generated API documentation
 - ✅ Startup/shutdown event handlers
+- ✅ OpenCV face detection and basic liveness verification (blink/head movement)
+- ✅ Tesseract OCR for identity document verification
+- ✅ Image preprocessing (grayscale, thresholding, denoising)
+- ✅ Field extraction with confidence scores
+- ✅ Rate limiting (10 requests/minute)
 
 ## Development
 
@@ -117,13 +161,10 @@ Test the health endpoint:
 curl http://localhost:8000/health
 ```
 
-Expected response:
-```json
-{
-  "status": "healthy",
-  "service": "soter-ai-service",
-  "version": "0.1.0"
-}
+Run all tests:
+
+```bash
+pytest -v
 ```
 
 ## Contributing

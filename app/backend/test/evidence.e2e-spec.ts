@@ -32,7 +32,9 @@ describe('Evidence Queue (e2e)', () => {
       for (const file of files) {
         await fs.unlink(path.join(uploadDir, file));
       }
-    } catch (err) {}
+    } catch {
+      // Ignore if dir doesn't exist
+    }
   });
 
   afterAll(async () => {
@@ -50,16 +52,18 @@ describe('Evidence Queue (e2e)', () => {
     expect(res.body.status).toBe(EvidenceStatus.pending);
 
     // Verify file exists on disk and is NOT plain text
-    const item = await prisma.evidenceQueueItem.findUnique({ where: { id: res.body.id } });
+    const item = await prisma.evidenceQueueItem.findUnique({
+      where: { id: res.body.id },
+    });
     expect(item?.filePath).toBeDefined();
-    
+
     const savedContent = await fs.readFile(item!.filePath!);
     expect(savedContent.toString()).not.toContain('test evidence content');
   });
 
   it('POST /evidence/upload prevents duplicates', async () => {
     const fileContent = Buffer.from('unique content');
-    
+
     await request(app.getHttpServer())
       .post('/api/v1/evidence/upload')
       .attach('file', fileContent, 'test1.txt')
@@ -94,7 +98,9 @@ describe('Evidence Queue (e2e)', () => {
       .attach('file', fileContent, 'delete-me.txt');
 
     const itemId = uploadRes.body.id;
-    const itemBefore = await prisma.evidenceQueueItem.findUnique({ where: { id: itemId } });
+    const itemBefore = await prisma.evidenceQueueItem.findUnique({
+      where: { id: itemId },
+    });
     const filePath = itemBefore!.filePath!;
 
     await request(app.getHttpServer())
@@ -102,7 +108,9 @@ describe('Evidence Queue (e2e)', () => {
       .expect(200);
 
     // Verify DB record is gone
-    const itemAfter = await prisma.evidenceQueueItem.findUnique({ where: { id: itemId } });
+    const itemAfter = await prisma.evidenceQueueItem.findUnique({
+      where: { id: itemId },
+    });
     expect(itemAfter).toBeNull();
 
     // Verify file is gone

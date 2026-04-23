@@ -118,10 +118,7 @@ export class EncryptionService {
    */
   decryptBuffer(encryptedBuffer: Buffer): Buffer {
     const iv = encryptedBuffer.subarray(0, IV_GCM_BYTES);
-    const authTag = encryptedBuffer.subarray(
-      IV_GCM_BYTES,
-      IV_GCM_BYTES + 16,
-    );
+    const authTag = encryptedBuffer.subarray(IV_GCM_BYTES, IV_GCM_BYTES + 16);
     const ciphertext = encryptedBuffer.subarray(IV_GCM_BYTES + 16);
 
     const decipher = crypto.createDecipheriv(ALGORITHM_GCM, this.key, iv);

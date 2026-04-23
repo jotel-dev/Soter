@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -50,7 +51,10 @@ export class EvidenceController {
     },
   })
   @ApiCreatedResponse({ description: 'Evidence queued successfully.' })
-  upload(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
+  upload(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: ExpressRequest,
+  ) {
     const ownerId = req.user?.apiKeyId || req.user?.authType || 'system';
     return this.evidenceService.queueEvidence(file, ownerId);
   }
@@ -59,10 +63,11 @@ export class EvidenceController {
   @Roles(AppRole.operator, AppRole.admin)
   @ApiOperation({
     summary: 'List evidence queue',
-    description: 'Retrieves all evidence items in the queue for the current user.',
+    description:
+      'Retrieves all evidence items in the queue for the current user.',
   })
   @ApiOkResponse({ description: 'Queue retrieved successfully.' })
-  getQueue(@Request() req: any) {
+  getQueue(@Request() req: ExpressRequest) {
     const ownerId = req.user?.apiKeyId || req.user?.authType || 'system';
     return this.evidenceService.findQueue(ownerId);
   }
@@ -75,7 +80,7 @@ export class EvidenceController {
     description: 'Manually triggers a retry for a failed evidence upload.',
   })
   @ApiOkResponse({ description: 'Retry initiated.' })
-  retry(@Param('id') id: string, @Request() req: any) {
+  retry(@Param('id') id: string, @Request() req: ExpressRequest) {
     const ownerId = req.user?.apiKeyId || req.user?.authType || 'system';
     return this.evidenceService.retry(id, ownerId);
   }
@@ -84,10 +89,11 @@ export class EvidenceController {
   @Roles(AppRole.operator, AppRole.admin)
   @ApiOperation({
     summary: 'Remove from queue',
-    description: 'Removes an evidence item from the queue and deletes the local file.',
+    description:
+      'Removes an evidence item from the queue and deletes the local file.',
   })
   @ApiOkResponse({ description: 'Item removed successfully.' })
-  remove(@Param('id') id: string, @Request() req: any) {
+  remove(@Param('id') id: string, @Request() req: ExpressRequest) {
     const ownerId = req.user?.apiKeyId || req.user?.authType || 'system';
     return this.evidenceService.remove(id, ownerId);
   }

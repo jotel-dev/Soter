@@ -1,8 +1,14 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { AuditService } from '../audit/audit.service';
 import * as fs from 'fs/promises';
+import { existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { EvidenceStatus } from '@prisma/client';
@@ -18,16 +24,16 @@ export class EvidenceService {
     private readonly auditService: AuditService,
   ) {
     // Ensure upload directory exists
-    if (!require('fs').existsSync(this.uploadDir)) {
-      require('fs').mkdirSync(this.uploadDir, { recursive: true });
+    if (!existsSync(this.uploadDir)) {
+      mkdirSync(this.uploadDir, { recursive: true });
     }
   }
 
-  async queueEvidence(
-    file: Express.Multer.File,
-    ownerId: string,
-  ) {
-    const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+  async queueEvidence(file: Express.Multer.File, ownerId: string) {
+    const fileHash = crypto
+      .createHash('sha256')
+      .update(file.buffer)
+      .digest('hex');
 
     // Check for duplicate upload
     const existing = await this.prisma.evidenceQueueItem.findUnique({
@@ -69,7 +75,7 @@ export class EvidenceService {
     });
 
     // Start upload process asynchronously
-    this.processUpload(item.id);
+    void this.processUpload(item.id);
 
     return item;
   }
@@ -90,7 +96,7 @@ export class EvidenceService {
 
     try {
       // MOCK: Simulate upload to S3/Cloud Storage
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Simulate success
       await this.prisma.evidenceQueueItem.update({
@@ -100,8 +106,10 @@ export class EvidenceService {
 
       this.logger.log(`Upload completed for ${item.id}`);
     } catch (err) {
-      this.logger.error(`Upload failed for ${item.id}: ${(err as Error).message}`);
-      
+      this.logger.error(
+        `Upload failed for ${item.id}: ${(err as Error).message}`,
+      );
+
       await this.prisma.evidenceQueueItem.update({
         where: { id },
         data: {
@@ -136,7 +144,7 @@ export class EvidenceService {
       data: { status: EvidenceStatus.pending },
     });
 
-    this.processUpload(id);
+    void this.processUpload(id);
 
     return { message: 'Retry initiated' };
   }
@@ -153,7 +161,9 @@ export class EvidenceService {
       try {
         await fs.unlink(item.filePath);
       } catch (err) {
-        this.logger.warn(`Failed to delete file ${item.filePath}: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to delete file ${item.filePath}: ${(err as Error).message}`,
+        );
       }
     }
 

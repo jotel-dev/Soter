@@ -2,10 +2,6 @@
 Soter AI Service - FastAPI Application
 Main entry point for the AI service layer.
 
-All new canonical routes live under ``/v1``.
-Legacy ``/ai/*`` routes are temporarily kept alive via HTTP 308
-redirects so existing consumers are not broken.
-
 """
 
 from contextlib import asynccontextmanager
@@ -22,8 +18,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-# Legacy flat router (kept so the OCR path registered in api/routes.py
-# still resolves while we migrate – see backward-compat section below).
+
 from api.routes import router as ocr_router
 
 # New versioned router
@@ -47,7 +42,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
 # Legacy -> v1 redirect map
+# Only routes that were previously registered directly on the app (not via
+# the ocr_router) need an explicit redirect entry here.  The OCR route is
+# still served by the legacy router above so no redirect is needed for it.
+# ---------------------------------------------------------------------------
 _LEGACY_TO_V1: dict = {
     "/ai/inference": "/v1/ai/inference",
     "/ai/proof-of-life": "/v1/ai/proof-of-life",
@@ -93,9 +94,6 @@ proof_of_life_analyzer = ProofOfLifeAnalyzer(
 )
 pii_scrubber_service = PIIScrubberService()
 humanitarian_verification_service = HumanitarianVerificationService()
-
-
-# Request models (kept here so test_main.py imports work unchanged)
 
 
 class InferenceRequest(BaseModel):
@@ -177,15 +175,37 @@ async def legacy_redirect_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def monitor_requests(request: Request, call_next):
-    # Skip the metrics endpoint to avoid infinite loop / log spam.
-    if request.url.path == "/ai/metrics":
+    path = request.url.path
+
+    # Paths that must NEVER be throttled:
+    #   /health        – load-balancer probes must always succeed
+    #   /              – root discovery endpoint
+    #   /docs, /redoc, /openapi.json – API docs
+    #   /ai/metrics    – Prometheus scrape (also avoids infinite loop)
+    #   Any path in _LEGACY_TO_V1 or matching _LEGACY_PREFIX_MAP – these are
+    #     cheap 308 redirects issued by legacy_redirect_middleware; the actual
+    #     work happens on the /v1/* destination, which IS subject to throttling.
+    _NEVER_THROTTLE = {
+        "/health",
+        "/",
+        "/ai/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    }
+
+    is_redirect_path = path in _LEGACY_TO_V1 or any(
+        path.startswith(pfx) for pfx, _ in _LEGACY_PREFIX_MAP
+    )
+
+    if path in _NEVER_THROTTLE or is_redirect_path:
         return await call_next(request)
 
     # Gracefully throttle if memory pressure is critical.
     if not metrics.check_system_resources(memory_threshold_percent=90.0):
         metrics.REQUEST_COUNT.labels(
             method=request.method,
-            endpoint=request.url.path,
+            endpoint=path,
             http_status=503,
         ).inc()
         return JSONResponse(
@@ -209,38 +229,29 @@ async def monitor_requests(request: Request, call_next):
         latency = time.time() - start_time
         metrics.REQUEST_COUNT.labels(
             method=request.method,
-            endpoint=request.url.path,
+            endpoint=path,
             http_status=status_code,
         ).inc()
-        metrics.REQUEST_LATENCY.labels(
-            method=request.method, endpoint=request.url.path
-        ).observe(latency)
+        metrics.REQUEST_LATENCY.labels(method=request.method, endpoint=path).observe(
+            latency
+        )
 
         monitored_prefixes = ("/ai/", "/v1/ai/")
-        excluded_paths = ("/ai/metrics",)
-        if (
-            any(request.url.path.startswith(p) for p in monitored_prefixes)
-            and request.url.path not in excluded_paths
-        ):
-            metrics.logger.info(f"API route {request.url.path} latency: {latency:.4f}s")
+        if any(path.startswith(p) for p in monitored_prefixes):
+            metrics.logger.info(f"API route {path} latency: {latency:.4f}s")
 
     return response
 
 
+# ---------------------------------------------------------------------------
 # Routers
+# ---------------------------------------------------------------------------
 
 # Legacy OCR router - still live for backward compatibility (no redirect).
 app.include_router(ocr_router)
 
 # Versioned router - canonical home for all routes going forward.
 app.include_router(v1_router)
-
-
-# ---------------------------------------------------------------------------
-# Unversioned utility endpoints (health, metrics, root)
-# These intentionally have no /v1 equivalent - they are infrastructure
-# endpoints consumed by load balancers and monitoring systems.
-# ---------------------------------------------------------------------------
 
 
 @app.get("/ai/metrics")
@@ -416,7 +427,9 @@ async def _legacy_cancel_task(task_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to cancel task: {str(e)}")
 
 
+# ---------------------------------------------------------------------------
 # Global error handlers
+# ---------------------------------------------------------------------------
 
 
 @app.exception_handler(HTTPException)
